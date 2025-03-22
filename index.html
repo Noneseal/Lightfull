@@ -78,7 +78,7 @@
         
         function connect() {
 
-            const ws = new WebSocket("ws://localhost:8080");
+            const ws = new WebSocket("https://lightfull.onrender.com");
             statusDisplay.textContent = '狀態: 正在連接...';
             
             ws.onopen = function() {
