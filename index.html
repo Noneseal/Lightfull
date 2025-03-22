@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Unity控制器</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .controller {
+            margin-top: 20px;
+            display: grid;
+            grid-template-columns: repeat(3, 70px);
+            grid-template-rows: repeat(3, 70px);
+            gap: 5px;
+        }
+        
+        .btn {
+            width: 70px;
+            height: 70px;
+            border: 2px solid #333;
+            border-radius: 10px;
+            background-color: #ddd;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            user-select: none;
+            transition: background-color 0.2s;
+        }
+        
+        .btn:active {
+            background-color: greenyellow;
+        }
+        
+        .btn.active {
+            background-color: greenyellow;
+        }
+        
+        .status {
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            background-color: #fff;
+            width: 80%;
+            max-width: 400px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Unity角色控制器</h1>
+    <div class="status" id="status">狀態: 未連線</div>
+    
+    <div class="controller">
+        <div class="btn" id="left">←</div>
+        <div class="btn" id="up">↑</div>
+        <div class="btn" id="right">→</div>
+    </div>
+    
+    <script>
+        const statusDisplay = document.getElementById('status');
+        
+        const upBtn = document.getElementById('up');
+        const leftBtn = document.getElementById('left');
+        const rightBtn = document.getElementById('right');
+
+        let clientId = null;
+        let reconnectAttempts = 0;
+        
+        function connect() {
+
+            const ws = new WebSocket("ws://localhost:8080");
+            statusDisplay.textContent = '狀態: 正在連接...';
+            
+            ws.onopen = function() {
+                statusDisplay.textContent = '狀態: 已連線';
+                statusDisplay.style.backgroundColor = '#dfffd7';
+                reconnectAttempts = 0;
+                
+                // 註冊為網頁客戶端
+                ws.send("register:web");
+            };
+
+            ws.onmessage = (event) => {
+                const data = event.data;
+                console.log("伺服器回應: ", data);
+                
+                // 處理註冊確認消息
+                if (data.startsWith("registered:")) {
+                    const parts = data.split(":");
+                    clientId = parts[2];
+                    statusDisplay.textContent = `狀態: 已註冊 (ID: ${clientId})`;
+                }
+                else {
+                    console.log("收到訊息: " + data);
+                }
+            };
+            
+            ws.onclose = function() {
+                statusDisplay.textContent = '狀態: 已斷開，正在嘗試重新連接...';
+                statusDisplay.style.backgroundColor = '#ffdfdf';
+                setTimeout(connect, 3000);
+            };
+            
+            ws.onerror = function(error) {
+                statusDisplay.textContent = '狀態: 連線錯誤，正在嘗試重新連接...';
+                statusDisplay.style.backgroundColor = '#ffdfdf';
+            };
+
+            // 發送命令到Unity
+            function sendCommand(command) {
+                if (ws.readyState === WebSocket.OPEN) {
+                    ws.send(command);
+                    console.log("發送命令: " + command);
+                } else {
+                    statusDisplay.textContent = "狀態: 未連接，無法發送命令";
+                }
+            }
+            
+            // 跳躍按鈕
+            upBtn.addEventListener('mousedown', () => {
+                sendCommand('jump');
+                upBtn.classList.add('active');
+                setTimeout(() => {
+                    upBtn.classList.remove('active');
+                }, 300);
+            });
+            
+            // 左移按鈕
+            leftBtn.addEventListener('mousedown', () => {
+                sendCommand('left');
+                leftBtn.classList.add('active');
+            });
+            
+            leftBtn.addEventListener('mouseup', () => {
+                sendCommand('stopLeft');
+                leftBtn.classList.remove('active');
+            });
+            
+            leftBtn.addEventListener('mouseleave', () => {
+                if (leftBtn.classList.contains('active')) {
+                    sendCommand('stopLeft');
+                    leftBtn.classList.remove('active');
+                }
+            });
+            
+            // 右移按鈕
+            rightBtn.addEventListener('mousedown', () => {
+                sendCommand('right');
+                rightBtn.classList.add('active');
+            });
+            
+            rightBtn.addEventListener('mouseup', () => {
+                sendCommand('stopRight');
+                rightBtn.classList.remove('active');
+            });
+            
+            rightBtn.addEventListener('mouseleave', () => {
+                if (rightBtn.classList.contains('active')) {
+                    sendCommand('stopRight');
+                    rightBtn.classList.remove('active');
+                }
+            });
+
+            // 為觸控設備添加事件
+            upBtn.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                sendCommand('jump');
+                upBtn.classList.add('active');
+                setTimeout(() => {
+                    upBtn.classList.remove('active');
+                }, 300);
+            });
+            
+            leftBtn.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                sendCommand('left');
+                leftBtn.classList.add('active');
+            });
+            
+            leftBtn.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                sendCommand('stopLeft');
+                leftBtn.classList.remove('active');
+            });
+            
+            rightBtn.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                sendCommand('right');
+                rightBtn.classList.add('active');
+            });
+            
+            rightBtn.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                sendCommand('stopRight');
+                rightBtn.classList.remove('active');
+            });
+
+            // 返回WebSocket實例以便清理
+            return ws;
+        }
+        
+        // 初始化連接
+        let wsConnection = connect();
+        
+        // 頁面關閉時清理
+        window.addEventListener('beforeunload', () => {
+            if (wsConnection && wsConnection.readyState === WebSocket.OPEN) {
+                wsConnection.close();
+            }
+        });
+    </script>
+</body>
+</html>
